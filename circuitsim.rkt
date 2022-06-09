@@ -1,14 +1,22 @@
 #lang racket
 (require data/heap)
+(require compatibility/mlist)
 ;------------------------------------------------------------------------------------------------------
 (struct wire ([value #:mutable] [actions #:mutable] [sim]))
 (struct sim ([stack #:mutable][time #:mutable]))
 
-(define (call-actions xs)
+(define (my-fold f lst);nie dziala
+  (cond[(empty? lst) ]
+       [#t (begin
+             (f (car lst))
+             (my-fold f (cdr lst)))]
+  ))
+
+(define (call-actions xs);na pierwszych miejscach w parach będą akcje
   (if (null? xs)
       (void)
       (begin
-        ((car xs))
+        ((car (car xs)))
         (call-actions (cdr xs)))))
 
 (define (wire-set! w v)
@@ -19,19 +27,20 @@
         (call-actions (wire-actions w)))))
 
 (define (add-action! w f)
-  (set-wire-actions! w (cons f (wire-actions w))))
+  (set-wire-actions! w (mcons f (wire-actions w))))
 
 (define (make-wire sim)
   (wire #f null sim))
 
 (define (make-sim)
-  (sim empty 0))
+  (sim (mlist ) 0))
 
 ;(define (sim-time source)
 ;  (sim-time source)
 ; )
 
-(define (sim-add-action! simu )
+(define (sim-add-action! simu extime action)
+  (mappend! (sim-stack simu) '(extime action) );;czemu???
     )
 
 (define (sim-wait! simu break)
@@ -56,19 +65,16 @@
   (nand-gate a d e)
   (nand-gate b d f)
   (nand-gate e f c))
-
-(define (probe name w)
-  (add-action! w (lambda ()
-                   (display name)
-                   (display " = ")
-                   (display (wire-value w))
-                   (display "\n"))))
   
 (define (nand-gate a b c)
   (define (and-action)
     (wire-set! c (not (and (wire-value a) (wire-value b)))))
   (add-action! a and-action)
   (add-action! b and-action))
+
+(define (compile w)
+  (begin (car w) (compile (cdr w)) )
+  )
 ;---------------------------------------------------------------------------------------------------------
 
 (provide sim? wire?
@@ -126,56 +132,96 @@
 ;---------------------------------------------------------------------------------
 ;;gates
 (define (gate-not wi wo)
-  (begin (wire-not wi)
-         ()
-    )
-  )
+  (sim-add-action! (wire-sim wi)
+                   (+ 1 (sim-time (wire-sim wi)))
+                   (wire-set! wo (not (wire-value wi)))
+    ));we wszystkich trzeba dodać chodzenie po dzieciach
 
-(define (gate-not wi1 wi2 wo)
-  
-  )
+(define (gate-and wi1 wi2 wo)
+  (sim-add-action! (wire-sim wi1)
+                   (+ 1 (sim-time (wire-sim wi1)))
+                   (wire-set! wo (and (wire-value wi1) (wire-value wi2)))
+  ))
 
-(define (gate-not wi1 wi2 wo)
-  
-  )
+(define (gate-or wi1 wi2 wo)
+  (sim-add-action! (wire-sim wi1)
+                   (+ 1 (sim-time (wire-sim wi1)))
+                   (wire-set! wo (or (wire-value wi1) (wire-value wi2)))
+  ))
 
-(define (gate-not wi1 wi2 wo)
-  
-  )
+(define (gate-nand wi1 wi2 wo)
+  (sim-add-action! (wire-sim wi1)
+                   (+ 1 (sim-time (wire-sim wi1)))
+                   (wire-set! wo (not (and (wire-value wi1) (wire-value wi2))))
+  ))
 
-(define (gate-not wi1 wi2 wo)
-  
-  )
+(define (gate-nor wi1 wi2 wo)
+  (sim-add-action! (wire-sim wi1)
+                   (+ 1 (sim-time (wire-sim wi1)))
+                   (wire-set! wo (not (or (wire-value wi1) (wire-value wi2))))
+  ))
 
-(define (gate-not wi1 wi2 wo)
-  
-  )
+(define (gate-xor wi1 wi2 wo)
+  (sim-add-action! (wire-sim wi1)
+                   (+ 2 (sim-time (wire-sim wi1)))
+                   (wire-set! wo (xor (wire-value wi1) (wire-value wi2)))
+  ))
 ;;wires---------------------------------------------------------------------
 (define ( wire-not wi )
-  (wire wi (not ) )
-  )
-          [wire-and  (-> wire? wire? wire?)]
-          [wire-nand (-> wire? wire? wire?)]
-          [wire-or   (-> wire? wire? wire?)]
-          [wire-nor  (-> wire? wire? wire?)]
-          [wire-xor  (-> wire? wire? wire?)]
+    (wire-on-change! wi gate-not)
+    (make-wire (wire-sim wi))
+    )
+
+(define (wire-and w1 w2)
+    (wire-on-change! w1 gate-and)
+    (wire-on-change! w2 gate-and)
+    (make-wire (wire-sim w1))
+    )
+
+(define (wire-nand w1 w2)
+    (wire-on-change! w1 gate-nand)
+    (wire-on-change! w2 gate-nand)
+    (make-wire (wire-sim w1))
+    )
+
+(define (wire-or w1 w2)
+    (wire-on-change! w1 gate-or)
+    (wire-on-change! w2 gate-or)
+    (make-wire (wire-sim w1))
+    )
+
+(define (wire-nor w1 w2)
+    (wire-on-change! w1 gate-nor)
+    (wire-on-change! w2 gate-nor)
+    (make-wire (wire-sim w1))
+    )
+
+(define (wire-xor w1 w2)
+    (wire-on-change! w1 gate-xor)
+    (wire-on-change! w2 gate-xor)
+    (make-wire (wire-sim w1))
+    )
 ;;actions--------------------------------------------------------------------
-(define (not-action w)
-  (not (wire-value w))
+(define (not-action w o)
+  (wire-set! o (not (wire-value w)))
   )
 
-(define (and-action w1 w2)
-  (and (wire-value w1) (wire-value w2))
+(define (and-action w1 w2 o)
+  (wire-set! o (and (wire-value w1) (wire-value w2)))
   )
 
-(define (or-action w1 w2)
-  (or (wire-value w1) (wire-value w2))
+(define (nand-action w1 w2 o)
+  (wire-set! o (not (and (wire-value w1) (wire-value w2))))
   )
 
-(define (nor-action w1 w2)
-  (not (or (wire-value w1) (wire-value w2)))
+(define (or-action w1 w2 o)
+  (wire-set! o (or (wire-value w1) (wire-value w2)))
   )
 
-(define (xor-action w1 w2)
-  (xor (wire-value w1) (wire-value w2))
+(define (nor-action w1 w2 o)
+  (wire-set! o (not (or (wire-value w1) (wire-value w2))))
+  )
+
+(define (xor-action w1 w2 o)
+  (wire-set! o (xor (wire-value w1) (wire-value w2)))
   )

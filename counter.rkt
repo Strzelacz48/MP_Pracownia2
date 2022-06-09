@@ -1,4 +1,4 @@
-#f #lang racket
+#lang racket
 (require "circuitsim.rkt")
 
 (define sim (make-sim))
