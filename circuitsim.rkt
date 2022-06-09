@@ -5,12 +5,7 @@
 (struct wire ([value #:mutable] [actions #:mutable] [sim]))
 (struct sim ([stack #:mutable][time #:mutable]))
 
-(define (my-fold f lst);nie dziala
-  (cond[(empty? lst) ]
-       [#t (begin
-             (f (car lst))
-             (my-fold f (cdr lst)))]
-  ))
+
 
 (define (call-actions xs);na pierwszych miejscach w parach będą akcje
   (if (null? xs)
@@ -44,10 +39,11 @@
     )
 
 (define (sim-wait! simu break)
-  (begin
     (set-sim-time! (+ (sim-time simu) break))
-    (sim-stack simu);dopracować
-    )
+    (if (<= (cdr(car (sim-stack simu)) ) (sim-time simu) )
+        (begin (execute (car (car) (sim-stack simu)))
+               (sim-wait! simu 0)
+          )));dopracować
 
   
   ;zdejmujemy ze stacka i wykonujemy te akcje które miały czas się wykonać
